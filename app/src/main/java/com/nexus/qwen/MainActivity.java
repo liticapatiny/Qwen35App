@@ -29,11 +29,13 @@ public class MainActivity extends Activity {
             "/storage/emulated/0/Download/NEXUS/modelos/" +
             "Qwen3.5-0.8B.Q4_K_M.gguf";
 
+    private static String nativeLoadError = null;
+
     static {
         try {
             System.loadLibrary("qwen_engine");
-        } catch (Throwable ignored) {
-            // UI remains usable while native backend is absent.
+        } catch (Throwable e) {
+            nativeLoadError = e.getClass().getSimpleName() + " • " + e.getMessage();
         }
     }
 
@@ -95,6 +97,9 @@ public class MainActivity extends Activity {
     }
 
     private String safeLoadModel(String path) {
+        if (nativeLoadError != null) {
+            return "ERRO CARREGANDO JNI: " + nativeLoadError;
+        }
         try {
             return nativeLoadModel(path);
         } catch (Throwable e) {
