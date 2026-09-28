@@ -1,0 +1,128 @@
+name: Build llama.cpp for Android ARMv7
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NDK_VERSION: "25.2.9519653"
+  CMAKE_VERSION: "3.31.6"
+  ANDROID_PLATFORM: "android-29"
+
+jobs:
+  build-armv7:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout Qwen35App
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK and CMake
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "ndk;${NDK_VERSION}" "cmake;${CMAKE_VERSION}"
+          echo "ANDROID_NDK=${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Clone llama.cpp
+        run: |
+          git clone --depth 1 https://github.com/ggml-org/llama.cpp.git third_party/llama.cpp
+          git -C third_party/llama.cpp rev-parse HEAD | tee llama-commit.txt
+
+      - name: Configure ARMv7
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          cmake -S third_party/llama.cpp \
+            -B build-llama-armv7 \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="${ANDROID_NDK}/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=armeabi-v7a \
+            -DANDROID_PLATFORM="${ANDROID_PLATFORM}" \
+            -DANDROID_ARM_NEON=ON \
+            -DGGML_NATIVE=OFF \
+            -DGGML_OPENMP=OFF \
+            -DGGML_LLAMAFILE=OFF \
+            -DLLAMA_OPENSSL=OFF \
+            -DGGML_BACKEND_DL=OFF \
+            -DGGML_RPC=OFF \
+            -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_BUILD_SERVER=OFF \
+            -DLLAMA_BUILD_COMMON=ON \
+            -DLLAMA_BUILD_EXAMPLES=ON
+
+      - name: Build ARMv7
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cmake --build build-llama-armv7 --config Release --parallel 2
+
+      - name: Verify ARMv7 libraries
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          echo "=== Generated native files ==="
+          find build-llama-armv7 -type f \( \
+            -name 'libllama.so' -o \
+            -name 'libggml.so' -o \
+            -name 'libggml-base.so' -o \
+            -name 'libggml-cpu.so' \
+          \) -print
+
+          mkdir -p artifacts/armeabi-v7a
+
+          find build-llama-armv7 -type f -name '*.so' -exec cp -v {} artifacts/armeabi-v7a/ \;
+
+          if ! find artifacts/armeabi-v7a -maxdepth 1 -type f -name 'libllama.so' | grep -q .; then
+            echo "ERRO: libllama.so não foi produzido."
+            exit 1
+          fi
+
+          file artifacts/armeabi-v7a/*.so
+
+      - name: Package ARMv7 llama.cpp
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          cp llama-commit.txt artifacts/
+          printf 'NDK=%s\nABI=armeabi-v7a\nPLATFORM=%s\n' \
+            "$NDK_VERSION" "$ANDROID_PLATFORM" > artifacts/build-info.txt
+
+          tar -czf llama-armv7-artifact.tar.gz -C artifacts .
+
+      - name: Upload ARMv7 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-cpp-android-armeabi-v7a
+          path: llama-armv7-artifact.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-armv7-build-logs
+          path: |
+            build-llama-armv7/CMakeCache.txt
+            build-llama-armv7/CMakeFiles/CMakeError.log
+            build-llama-armv7/CMakeFiles/CMakeOutput.log
+            llama-commit.txt
+          if-no-files-found: ignore
+          retention-days: 7
