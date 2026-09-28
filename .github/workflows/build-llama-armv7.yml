@@ -31,7 +31,6 @@ jobs:
         shell: bash
         run: |
           set -e
-
           SDK="$ANDROID_HOME"
           TOOLS_DIR="$SDK/cmdline-tools"
           TMP_DIR="$RUNNER_TEMP/android-tools"
@@ -39,8 +38,6 @@ jobs:
           rm -rf "$TMP_DIR"
           mkdir -p "$TMP_DIR"
           mkdir -p "$TOOLS_DIR"
-
-          echo "Atualizando Android Command Line Tools..."
 
           curl -fsSL \
             "https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip" \
@@ -61,14 +58,13 @@ jobs:
 
           export PATH="$TOOLS_DIR/latest/bin:$SDK/platform-tools:$PATH"
 
-          echo "sdkmanager:"
           sdkmanager --version
 
       - name: Accept Android SDK licenses
         shell: bash
         run: |
           set -e
-          yes | sdkmanager --licenses >/dev/null
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
 
       - name: Install Android build components
         shell: bash
@@ -95,9 +91,7 @@ jobs:
           test -d "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
           test -d "$ANDROID_HOME/cmake/3.31.5"
 
-          "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" \
-            --version
-
+          "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" --version
           cmake --version
 
       - name: Clone llama.cpp
@@ -150,7 +144,7 @@ jobs:
             -name '*.so' \
             -exec cp -f {} app/src/main/jniLibs/armeabi-v7a/ \;
 
-          echo "Bibliotecas ARMv7 encontradas:"
+          echo "Bibliotecas ARMv7:"
           find app/src/main/jniLibs/armeabi-v7a \
             -maxdepth 1 \
             -type f \
@@ -161,30 +155,20 @@ jobs:
         shell: bash
         run: |
           set -e
-
           gradle wrapper --gradle-version 8.11.1
-
           chmod +x ./gradlew
 
       - name: Build Android project
         shell: bash
         run: |
           set -e
-
-          ./gradlew \
-            --no-daemon \
-            --stacktrace \
-            assembleDebug
+          ./gradlew --no-daemon --stacktrace assembleDebug
 
       - name: Show generated APK
         shell: bash
         run: |
           set -e
-
-          find app/build/outputs \
-            -type f \
-            -name '*.apk' \
-            -print
+          find app/build/outputs -type f -name '*.apk' -print
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
