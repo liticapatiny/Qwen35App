@@ -98,7 +98,7 @@ public class MainActivity extends Activity {
         try {
             return nativeLoadModel(path);
         } catch (Throwable e) {
-            return "Modelo encontrado • backend nativo aguardando";
+            return "ERRO JNI: " + e.getClass().getSimpleName() + " • " + e.getMessage();
         }
     }
 
