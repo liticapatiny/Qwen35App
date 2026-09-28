@@ -133,6 +133,17 @@ jobs:
             --config Release \
             --parallel 2
 
+      - name: Collect llama.cpp headers
+        shell: bash
+        run: |
+          set -e
+
+          mkdir -p app/src/main/cpp/llama
+          cp -R llama.cpp/include app/src/main/cpp/llama/
+
+          echo "Headers llama.cpp:"
+          find app/src/main/cpp/llama/include -maxdepth 1 -type f -print
+
       - name: Collect ARMv7 native libraries
         shell: bash
         run: |
