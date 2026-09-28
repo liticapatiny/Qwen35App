@@ -10,6 +10,7 @@ add_library(qwen_engine SHARED
 # em app/src/main/cpp/llama/include
 target_include_directories(qwen_engine PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/llama/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/ggml/include
 )
 
 # Bibliotecas nativas do llama.cpp que entram no APK
