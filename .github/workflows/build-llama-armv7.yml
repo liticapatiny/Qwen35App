@@ -152,8 +152,17 @@ jobs:
           set -e
 
           mkdir -p app/src/main/jniLibs/armeabi-v7a
-          cp -f "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so" app/src/main/jniLibs/armeabi-v7a/
-          echo "libc++_shared.so adicionada ao APK"
+          LIBCXX=$(find "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" -type f -name "libc++_shared.so" -path "*/arm-linux-androideabi/*" -print -quit)
+
+          if [ -z "$LIBCXX" ]; then
+            echo "ERRO: libc++_shared.so ARMv7 não encontrada"
+            exit 1
+          fi
+
+          echo "libc++_shared.so encontrada em: $LIBCXX"
+          cp -f "$LIBCXX" app/src/main/jniLibs/armeabi-v7a/libc++_shared.so
+          test -s app/src/main/jniLibs/armeabi-v7a/libc++_shared.so
+          echo "libc++_shared.so copiada para jniLibs"
 
           find llama.cpp/build-armv7 \
             -type f \
@@ -180,6 +189,18 @@ jobs:
           set -e
           ./gradlew --no-daemon --stacktrace assembleDebug
 
+      - name: Verify APK native libraries
+        shell: bash
+        run: |
+          set -e
+          APK=$(find app/build/outputs -type f -name "*.apk" -print -quit)
+          if [ -z "$APK" ]; then
+            echo "ERRO: APK não encontrado"
+            exit 1
+          fi
+          echo "APK: $APK"
+          unzip -l "$APK" | grep "lib/armeabi-v7a/libc++_shared.so"
+          echo "libc++_shared.so confirmada dentro do APK."
       - name: Show generated APK
         shell: bash
         run: |
