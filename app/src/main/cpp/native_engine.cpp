@@ -2,6 +2,8 @@
 #include <string>
 #include <vector>
 #include <mutex>
+#include <sstream>
+
 
 #include "llama.h"
 
@@ -13,6 +15,14 @@ static llama_sampler * g_sampler = nullptr;
 
 static std::string g_model_path;
 static bool g_backend_ready = false;
+static std::string g_load_error;
+
+static void capturar_log(ggml_log_level level, const char * text, void *)
+{
+    if (level >= GGML_LOG_LEVEL_ERROR && text) {
+        g_load_error += text;
+    }
+}
 
 
 static void liberar_backend()
@@ -77,6 +87,8 @@ Java_com_nexus_qwen_MainActivity_nativeLoadModel(
 
     liberar_backend();
 
+    g_load_error.clear();
+    llama_log_set(capturar_log, nullptr);
     llama_backend_init();
 
     llama_model_params model_params =
@@ -91,12 +103,18 @@ Java_com_nexus_qwen_MainActivity_nativeLoadModel(
         );
 
     if (!g_model) {
+        llama_log_set(nullptr, nullptr);
         llama_backend_free();
 
-        return env->NewStringUTF(
-            "Falha ao carregar o modelo GGUF"
-        );
+        std::string erro = "Falha ao carregar o modelo GGUF";
+        if (!g_load_error.empty()) {
+            erro += "\\n\\nDetalhe llama.cpp:\\n" + g_load_error;
+        }
+
+        return env->NewStringUTF(erro.c_str());
     }
+
+    llama_log_set(nullptr, nullptr);
 
     llama_context_params context_params =
         llama_context_default_params();
