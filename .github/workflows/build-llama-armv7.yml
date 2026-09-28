@@ -10,6 +10,13 @@ jobs:
   build-armv7:
     runs-on: ubuntu-24.04
 
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_NDK_VERSION: 27.3.13750724
+      ANDROID_PLATFORM: android-29
+      ANDROID_ABI: armeabi-v7a
+
     steps:
       - name: Checkout Qwen35App
         uses: actions/checkout@v4
@@ -20,49 +27,103 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          accept-android-sdk-licenses: false
-          log-accepted-android-sdk-licenses: false
+      - name: Prepare Android SDK tools
+        shell: bash
+        run: |
+          set -e
+
+          SDK="$ANDROID_HOME"
+          TOOLS_DIR="$SDK/cmdline-tools"
+          TMP_DIR="$RUNNER_TEMP/android-tools"
+
+          rm -rf "$TMP_DIR"
+          mkdir -p "$TMP_DIR"
+          mkdir -p "$TOOLS_DIR"
+
+          echo "Atualizando Android Command Line Tools..."
+
+          curl -fsSL \
+            "https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip" \
+            -o "$TMP_DIR/cmdline-tools.zip"
+
+          rm -rf "$TMP_DIR/extracted"
+          mkdir -p "$TMP_DIR/extracted"
+
+          unzip -q "$TMP_DIR/cmdline-tools.zip" -d "$TMP_DIR/extracted"
+
+          rm -rf "$TOOLS_DIR/latest"
+          mkdir -p "$TOOLS_DIR/latest"
+
+          cp -a "$TMP_DIR/extracted/cmdline-tools/." "$TOOLS_DIR/latest/"
+
+          echo "$TOOLS_DIR/latest/bin" >> "$GITHUB_PATH"
+          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
+
+          export PATH="$TOOLS_DIR/latest/bin:$SDK/platform-tools:$PATH"
+
+          echo "sdkmanager:"
+          sdkmanager --version
 
       - name: Accept Android SDK licenses
         shell: bash
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
+          set -e
+          yes | sdkmanager --licenses >/dev/null
 
-      - name: Install Android NDK and CMake
+      - name: Install Android build components
         shell: bash
         run: |
-          sdkmanager "platform-tools" \
-                     "platforms;android-35" \
-                     "build-tools;35.0.0" \
-                     "cmake;3.31.5" \
-                     "ndk;27.2.12479018"
+          set -e
+
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "cmake;3.31.5" \
+            "ndk;27.3.13750724"
 
       - name: Verify Android toolchain
         shell: bash
         run: |
+          set -e
+
           echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
-          sdkmanager --list_installed | grep -E 'platform-tools|platforms;android-35|build-tools;35.0.0|cmake;3.31.5|ndk;27.2.12479018' || true
-          test -d "$ANDROID_NDK_HOME"
+          echo "ANDROID_NDK=$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+
+          test -d "$ANDROID_HOME"
+          test -d "$ANDROID_HOME/platforms/android-35"
+          test -d "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+          test -d "$ANDROID_HOME/cmake/3.31.5"
+
+          "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" \
+            --version
+
+          cmake --version
 
       - name: Clone llama.cpp
         shell: bash
         run: |
-          git clone --depth 1 https://github.com/ggml-org/llama.cpp.git llama.cpp
+          set -e
+
+          git clone --depth 1 \
+            https://github.com/ggml-org/llama.cpp.git \
+            llama.cpp
 
       - name: Configure llama.cpp for ARMv7
         shell: bash
         run: |
-          cmake -S llama.cpp -B llama.cpp/build-armv7 \
-            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
-            -DANDROID_ABI=armeabi-v7a \
-            -DANDROID_PLATFORM=android-29 \
+          set -e
+
+          cmake \
+            -S llama.cpp \
+            -B llama.cpp/build-armv7 \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI="$ANDROID_ABI" \
+            -DANDROID_PLATFORM="$ANDROID_PLATFORM" \
             -DANDROID_STL=c++_shared \
-            -DGGML_OPENMP=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
             -DGGML_NATIVE=OFF \
+            -DGGML_OPENMP=OFF \
             -DLLAMA_BUILD_TESTS=OFF \
             -DLLAMA_BUILD_EXAMPLES=ON \
             -DLLAMA_BUILD_SERVER=ON
@@ -70,28 +131,60 @@ jobs:
       - name: Build llama.cpp
         shell: bash
         run: |
-          cmake --build llama.cpp/build-armv7 \
+          set -e
+
+          cmake \
+            --build llama.cpp/build-armv7 \
             --config Release \
             --parallel 2
 
-      - name: Package ARMv7 native libraries
+      - name: Collect ARMv7 native libraries
         shell: bash
         run: |
+          set -e
+
           mkdir -p app/src/main/jniLibs/armeabi-v7a
-          find llama.cpp/build-armv7 -type f \
-            \( -name '*.so' -o -name 'llama-cli' -o -name 'llama-server' \) \
+
+          find llama.cpp/build-armv7 \
+            -type f \
+            -name '*.so' \
+            -exec cp -f {} app/src/main/jniLibs/armeabi-v7a/ \;
+
+          echo "Bibliotecas ARMv7 encontradas:"
+          find app/src/main/jniLibs/armeabi-v7a \
+            -maxdepth 1 \
+            -type f \
+            -name '*.so' \
             -print
+
+      - name: Prepare Gradle Wrapper
+        shell: bash
+        run: |
+          set -e
+
+          gradle wrapper --gradle-version 8.11.1
+
+          chmod +x ./gradlew
 
       - name: Build Android project
         shell: bash
         run: |
-          chmod +x ./gradlew 2>/dev/null || true
-          if [ -f ./gradlew ]; then
-            ./gradlew assembleDebug
-          else
-            echo "Gradle wrapper não está presente no projeto."
-            exit 1
-          fi
+          set -e
+
+          ./gradlew \
+            --no-daemon \
+            --stacktrace \
+            assembleDebug
+
+      - name: Show generated APK
+        shell: bash
+        run: |
+          set -e
+
+          find app/build/outputs \
+            -type f \
+            -name '*.apk' \
+            -print
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
