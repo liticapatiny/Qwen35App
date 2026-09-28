@@ -152,6 +152,8 @@ jobs:
           set -e
 
           mkdir -p app/src/main/jniLibs/armeabi-v7a
+          cp -f "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so" app/src/main/jniLibs/armeabi-v7a/
+          echo "libc++_shared.so adicionada ao APK"
 
           find llama.cpp/build-armv7 \
             -type f \
