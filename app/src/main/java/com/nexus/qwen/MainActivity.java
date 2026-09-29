@@ -68,12 +68,19 @@ public class MainActivity extends Activity {
     private void prepareModelAccess() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
             status.setText("Permissão de arquivos necessária");
-            addMessage("Sistema", "Permita o acesso aos arquivos para carregar o modelo.");
-            Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
-            intent.setData(Uri.parse("package:" + getPackageName()));
-            startActivityForResult(intent, STORAGE_ACCESS);
+            addMessage("Sistema", "Abra Acesso a todos os arquivos e permita o acesso para o Qwen3.5.");
+
+            try {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                startActivityForResult(intent, STORAGE_ACCESS);
+            } catch (Exception e) {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                intent.setData(Uri.parse("package:" + getPackageName()));
+                startActivityForResult(intent, STORAGE_ACCESS);
+            }
             return;
         }
+
         loadDefaultModel();
     }
 
