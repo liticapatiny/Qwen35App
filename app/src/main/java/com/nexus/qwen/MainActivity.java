@@ -61,7 +61,6 @@ public class MainActivity extends Activity {
                 "localmente no aparelho.");
 
         prepareModelAccess();
-        }
 
         send.setOnClickListener(v -> sendMessage());
     }
