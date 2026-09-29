@@ -119,8 +119,8 @@ Java_com_nexus_qwen_MainActivity_nativeLoadModel(
     llama_context_params context_params =
         llama_context_default_params();
 
-    context_params.n_ctx = 512;
-    context_params.n_batch = 512;
+    context_params.n_ctx = 256;
+    context_params.n_batch = 128;
 
     g_context =
         llama_init_from_model(
