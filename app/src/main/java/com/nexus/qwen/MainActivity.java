@@ -3,6 +3,7 @@ package com.nexus.qwen;
 import android.app.Activity;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Build;
 import android.content.Intent;
 import android.net.Uri;
 import android.provider.Settings;
@@ -24,6 +25,7 @@ public class MainActivity extends Activity {
     private TextView status;
 
     private static final int PICK_MODEL = 7001;
+    private static final int STORAGE_ACCESS = 7002;
 
     private static final String DEFAULT_MODEL =
             "/storage/emulated/0/Download/NEXUS/modelos/" +
@@ -58,8 +60,26 @@ public class MainActivity extends Activity {
                 "Este aplicativo foi preparado para executar o modelo " +
                 "localmente no aparelho.");
 
-        File model = new File(DEFAULT_MODEL);
+        prepareModelAccess();
+        }
 
+        send.setOnClickListener(v -> sendMessage());
+    }
+
+    private void prepareModelAccess() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+            status.setText("Permissão de arquivos necessária");
+            addMessage("Sistema", "Permita o acesso aos arquivos para carregar o modelo.");
+            Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+            intent.setData(Uri.parse("package:" + getPackageName()));
+            startActivityForResult(intent, STORAGE_ACCESS);
+            return;
+        }
+        loadDefaultModel();
+    }
+
+    private void loadDefaultModel() {
+        File model = new File(DEFAULT_MODEL);
         if (model.exists()) {
             String result = safeLoadModel(DEFAULT_MODEL);
             status.setText(result);
@@ -67,9 +87,8 @@ public class MainActivity extends Activity {
             status.setText("Modelo não encontrado • toque no botão abaixo para selecionar");
             addModelButton();
         }
-
-        send.setOnClickListener(v -> sendMessage());
     }
+
 
     private void sendMessage() {
         String text = input.getText().toString().trim();
@@ -128,6 +147,15 @@ public class MainActivity extends Activity {
             Intent data) {
 
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == STORAGE_ACCESS) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()) {
+                loadDefaultModel();
+            } else {
+                status.setText("Permissão de arquivos não concedida");
+            }
+            return;
+        }
+
 
         if (requestCode == PICK_MODEL &&
                 resultCode == RESULT_OK &&
