@@ -202,6 +202,10 @@ Java_com_nexus_qwen_MainActivity_nativeChat(
     std::string texto(raw);
 
     env->ReleaseStringUTFChars(prompt, raw);
+    const char* tmpl = llama_model_chat_template(g_model, nullptr);
+    if (!tmpl || !*tmpl) {
+        return env->NewStringUTF("O modelo Qwen não possui chat template.");
+    }
 
     llama_memory_clear(
         llama_get_memory(g_context),
@@ -217,11 +221,58 @@ Java_com_nexus_qwen_MainActivity_nativeChat(
         );
     }
 
+    llama_chat_message message = {
+        "user",
+        texto.c_str()
+    };
+
+    int32_t formatted_len =
+        llama_chat_apply_template(
+            tmpl,
+            &message,
+            1,
+            true,
+            nullptr,
+            0
+        );
+
+    if (formatted_len <= 0) {
+        return env->NewStringUTF(
+            "Falha ao aplicar o chat template do Qwen."
+        );
+    }
+
+    std::vector<char> formatted(
+        (size_t)formatted_len + 1,
+        '\0'
+    );
+
+    int32_t written =
+        llama_chat_apply_template(
+            tmpl,
+            &message,
+            1,
+            true,
+            formatted.data(),
+            (int32_t)formatted.size()
+        );
+
+    if (written < 0) {
+        return env->NewStringUTF(
+            "Falha ao formatar a mensagem para o Qwen."
+        );
+    }
+
+    std::string prompt_formatado(
+        formatted.data(),
+        (size_t)written
+    );
+
     int n_tokens =
         -llama_tokenize(
             vocab,
-            texto.c_str(),
-            texto.size(),
+            prompt_formatado.c_str(),
+            prompt_formatado.size(),
             nullptr,
             0,
             true,
@@ -230,7 +281,7 @@ Java_com_nexus_qwen_MainActivity_nativeChat(
 
     if (n_tokens <= 0) {
         return env->NewStringUTF(
-            "Não foi possível tokenizar a mensagem."
+            "Não foi possível tokenizar a mensagem formatada."
         );
     }
 
@@ -239,8 +290,8 @@ Java_com_nexus_qwen_MainActivity_nativeChat(
     int result =
         llama_tokenize(
             vocab,
-            texto.c_str(),
-            texto.size(),
+            prompt_formatado.c_str(),
+            prompt_formatado.size(),
             tokens.data(),
             tokens.size(),
             true,
@@ -252,6 +303,7 @@ Java_com_nexus_qwen_MainActivity_nativeChat(
             "Falha na tokenização."
         );
     }
+
 
     llama_batch batch =
         llama_batch_get_one(
