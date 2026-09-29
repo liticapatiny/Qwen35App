@@ -203,6 +203,11 @@ Java_com_nexus_qwen_MainActivity_nativeChat(
 
     env->ReleaseStringUTFChars(prompt, raw);
 
+    llama_memory_clear(
+        llama_get_memory(g_context),
+        true
+    );
+
     const llama_vocab* vocab =
         llama_model_get_vocab(g_model);
 
