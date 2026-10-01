@@ -184,17 +184,62 @@ public class MainActivity extends Activity {
 
     private void addMessage(String author, String text) {
 
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setPadding(20, 18, 20, 12);
+
+        if ("Você".equals(author)) {
+            container.setBackgroundColor(Color.rgb(31, 91, 190));
+        } else {
+            container.setBackgroundColor(Color.rgb(17, 26, 40));
+        }
+
         TextView view = new TextView(this);
 
         view.setText(author + "\n\n" + text);
         view.setTextColor(Color.WHITE);
         view.setTextSize(16);
-        view.setPadding(20, 18, 20, 18);
+        view.setTextIsSelectable(true);
+        view.setPadding(0, 0, 0, 12);
 
-        if ("Você".equals(author)) {
-            view.setBackgroundColor(Color.rgb(31, 91, 190));
-        } else {
-            view.setBackgroundColor(Color.rgb(17, 26, 40));
+        container.addView(
+                view,
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+        );
+
+        if ("Qwen3.5".equals(author) || "Você".equals(author)) {
+
+            android.widget.Button copiar =
+                    new android.widget.Button(this);
+
+            copiar.setText("COPIAR");
+
+            copiar.setOnClickListener(v -> {
+
+                android.content.ClipboardManager clipboard =
+                        (android.content.ClipboardManager)
+                                getSystemService(CLIPBOARD_SERVICE);
+
+                android.content.ClipData clip =
+                        android.content.ClipData.newPlainText(
+                                "Qwen3.5",
+                                text
+                        );
+
+                clipboard.setPrimaryClip(clip);
+
+                copiar.setText("COPIADO");
+
+                copiar.postDelayed(
+                        () -> copiar.setText("COPIAR"),
+                        1200
+                );
+            });
+
+            container.addView(copiar);
         }
 
         LinearLayout.LayoutParams params =
@@ -205,7 +250,7 @@ public class MainActivity extends Activity {
 
         params.setMargins(0, 7, 0, 7);
 
-        messages.addView(view, params);
+        messages.addView(container, params);
 
         ScrollView scroll = findViewById(R.id.scroll);
 
