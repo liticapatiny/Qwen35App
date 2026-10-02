@@ -11,6 +11,7 @@ add_library(qwen_engine SHARED
 target_include_directories(qwen_engine PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/llama/include
     ${CMAKE_CURRENT_SOURCE_DIR}/ggml/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../llama.cpp/common
 )
 
 # Bibliotecas nativas do llama.cpp que entram no APK
@@ -18,6 +19,12 @@ add_library(llama SHARED IMPORTED)
 set_target_properties(llama PROPERTIES
     IMPORTED_LOCATION
     ${CMAKE_CURRENT_SOURCE_DIR}/../jniLibs/${ANDROID_ABI}/libllama.so
+)
+
+add_library(llama-common SHARED IMPORTED)
+set_target_properties(llama-common PROPERTIES
+    IMPORTED_LOCATION
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jniLibs/${ANDROID_ABI}/libllama-common.so
 )
 
 add_library(ggml SHARED IMPORTED)
@@ -43,6 +50,7 @@ find_library(log-lib log)
 target_link_libraries(
     qwen_engine
     llama
+    llama-common
     ggml
     ggml-base
     ggml-cpu

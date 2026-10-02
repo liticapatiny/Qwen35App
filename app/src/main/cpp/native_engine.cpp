@@ -6,6 +6,7 @@
 
 
 #include "llama.h"
+#include "chat.h"
 
 static std::mutex g_mutex;
 
@@ -202,10 +203,12 @@ Java_com_nexus_qwen_MainActivity_nativeChat(
     std::string texto(raw);
 
     env->ReleaseStringUTFChars(prompt, raw);
-    const char* tmpl = llama_model_chat_template(g_model, nullptr);
-    if (!tmpl || !*tmpl) {
-        return env->NewStringUTF("O modelo Qwen não possui chat template.");
-    }
+    auto chat_templates = common_chat_templates_init(g_model, "", "", "");
+    if (!chat_templates) { return env->NewStringUTF("Falha ao inicializar os templates Jinja do Qwen."); }
+    common_chat_templates_inputs chat_inputs;
+    chat_inputs.messages.push_back({"user", texto});
+    chat_inputs.enable_thinking = false;
+    common_chat_params chat_params = common_chat_templates_apply(chat_templates, chat_inputs);
 
     llama_memory_clear(
         llama_get_memory(g_context),
@@ -221,52 +224,13 @@ Java_com_nexus_qwen_MainActivity_nativeChat(
         );
     }
 
-    llama_chat_message message = {
-        "user",
-        texto.c_str()
-    };
-
-    int32_t formatted_len =
-        llama_chat_apply_template(
-            tmpl,
-            &message,
-            1,
-            true,
-            nullptr,
-            0
-        );
-
-    if (formatted_len <= 0) {
+    if (chat_params.prompt.empty()) {
         return env->NewStringUTF(
             "Falha ao aplicar o chat template do Qwen."
         );
     }
 
-    std::vector<char> formatted(
-        (size_t)formatted_len + 1,
-        '\0'
-    );
-
-    int32_t written =
-        llama_chat_apply_template(
-            tmpl,
-            &message,
-            1,
-            true,
-            formatted.data(),
-            (int32_t)formatted.size()
-        );
-
-    if (written < 0) {
-        return env->NewStringUTF(
-            "Falha ao formatar a mensagem para o Qwen."
-        );
-    }
-
-    std::string prompt_formatado(
-        formatted.data(),
-        (size_t)written
-    );
+    std::string prompt_formatado = chat_params.prompt;
 
     int n_tokens =
         -llama_tokenize(
