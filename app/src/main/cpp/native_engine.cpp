@@ -319,7 +319,7 @@ Java_com_nexus_qwen_MainActivity_nativeChat(
 
     std::string resposta;
 
-    for (int i = 0; i < 64; ++i) {
+    for (int i = 0; i < 256; ++i) {
 
         llama_token token =
             llama_sampler_sample(
