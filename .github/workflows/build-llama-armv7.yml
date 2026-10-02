@@ -144,6 +144,8 @@ jobs:
           cp -R llama.cpp/include app/src/main/cpp/llama/
           mkdir -p app/src/main/cpp/ggml
           cp -R llama.cpp/ggml/include app/src/main/cpp/ggml/
+          mkdir -p app/src/main/cpp/common
+          cp -R llama.cpp/common/. app/src/main/cpp/common/
 
           echo "Headers llama.cpp:"
           find app/src/main/cpp/llama/include -maxdepth 1 -type f -print
