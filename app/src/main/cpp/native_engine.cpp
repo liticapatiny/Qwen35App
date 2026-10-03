@@ -208,7 +208,7 @@ Java_com_nexus_qwen_MainActivity_nativeChat(
     common_chat_templates_inputs chat_inputs;
     chat_inputs.messages.push_back({"user", texto});
     chat_inputs.enable_thinking = false;
-    common_chat_params chat_params = common_chat_templates_apply(chat_templates, chat_inputs);
+    common_chat_params chat_params = common_chat_templates_apply(chat_templates.get(), chat_inputs);
 
     llama_memory_clear(
         llama_get_memory(g_context),
