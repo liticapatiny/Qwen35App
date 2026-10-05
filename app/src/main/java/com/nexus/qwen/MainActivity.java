@@ -22,7 +22,12 @@ public class MainActivity extends Activity {
 
     private LinearLayout messages;
     private EditText input;
+    private EditText systemPrompt;
     private TextView status;
+
+    private LinearLayout configPanel;
+    private Button configButton;
+    private Button savePromptButton;
 
     private static final int PICK_MODEL = 7001;
     private static final int STORAGE_ACCESS = 7002;
@@ -30,6 +35,14 @@ public class MainActivity extends Activity {
     private static final String DEFAULT_MODEL =
             "/storage/emulated/0/Download/NEXUS/modelos/" +
             "Qwen3.5-0.8B.Q4_K_M.gguf";
+
+    private static final String DEFAULT_SYSTEM_PROMPT =
+            "Você é o Qwen3.5, um assistente local executado no aparelho. " +
+            "Responda de forma clara, útil e objetiva. " +
+            "Não invente informações.";
+
+    private static final String PREFS = "nexus_config";
+    private static final String KEY_SYSTEM_PROMPT = "system_prompt";
 
     private static String nativeLoadError = null;
 
@@ -52,8 +65,16 @@ public class MainActivity extends Activity {
 
         messages = findViewById(R.id.messages);
         input = findViewById(R.id.input);
+        systemPrompt = findViewById(R.id.systemPrompt);
         status = findViewById(R.id.status);
+
+        configPanel = findViewById(R.id.configPanel);
+        configButton = findViewById(R.id.config);
+        savePromptButton = findViewById(R.id.savePrompt);
+
         Button send = findViewById(R.id.send);
+
+        carregarSystemPrompt();
 
         addMessage("Qwen3.5",
                 "Olá! Eu sou o Qwen3.5 0.8B.\n\n" +
@@ -62,7 +83,55 @@ public class MainActivity extends Activity {
 
         prepareModelAccess();
 
+        configButton.setOnClickListener(v -> {
+
+            if (configPanel.getVisibility() == View.VISIBLE) {
+                configPanel.setVisibility(View.GONE);
+            } else {
+                configPanel.setVisibility(View.VISIBLE);
+                systemPrompt.requestFocus();
+            }
+
+        });
+
+        savePromptButton.setOnClickListener(v -> salvarSystemPrompt());
+
         send.setOnClickListener(v -> sendMessage());
+    }
+
+    private void carregarSystemPrompt() {
+
+        android.content.SharedPreferences prefs =
+                getSharedPreferences(PREFS, MODE_PRIVATE);
+
+        String prompt = prefs.getString(
+                KEY_SYSTEM_PROMPT,
+                DEFAULT_SYSTEM_PROMPT
+        );
+
+        systemPrompt.setText(prompt);
+    }
+
+    private void salvarSystemPrompt() {
+
+        String prompt = systemPrompt.getText().toString().trim();
+
+        if (prompt.isEmpty()) {
+            prompt = DEFAULT_SYSTEM_PROMPT;
+            systemPrompt.setText(prompt);
+        }
+
+        getSharedPreferences(PREFS, MODE_PRIVATE)
+                .edit()
+                .putString(KEY_SYSTEM_PROMPT, prompt)
+                .apply();
+
+        savePromptButton.setText("SALVO");
+
+        savePromptButton.postDelayed(
+                () -> savePromptButton.setText("SALVAR"),
+                1200
+        );
     }
 
     private void prepareModelAccess() {
@@ -86,6 +155,7 @@ public class MainActivity extends Activity {
 
     private void loadDefaultModel() {
         File model = new File(DEFAULT_MODEL);
+
         if (model.exists()) {
             String result = safeLoadModel(DEFAULT_MODEL);
             status.setText(result);
@@ -95,8 +165,8 @@ public class MainActivity extends Activity {
         }
     }
 
-
     private void sendMessage() {
+
         String text = input.getText().toString().trim();
 
         if (text.isEmpty()) return;
@@ -104,11 +174,29 @@ public class MainActivity extends Activity {
         addMessage("Você", text);
         input.setText("");
 
+        String promptConfigurado =
+                systemPrompt.getText().toString().trim();
+
+        if (promptConfigurado.isEmpty()) {
+            promptConfigurado = DEFAULT_SYSTEM_PROMPT;
+        }
+
+        final String systemPromptFinal = promptConfigurado;
+        final String perguntaFinal = text;
+
         new Thread(() -> {
+
             String answer;
 
             try {
-                answer = nativeChat(text);
+
+                String promptParaQwen =
+                        systemPromptFinal +
+                        "\n\nPERGUNTA DO USUÁRIO:\n" +
+                        perguntaFinal;
+
+                answer = nativeChat(promptParaQwen);
+
             } catch (Throwable e) {
                 answer = "Backend Qwen ainda não carregado.";
             }
@@ -118,13 +206,16 @@ public class MainActivity extends Activity {
             runOnUiThread(() ->
                     addMessage("Qwen3.5", finalAnswer)
             );
+
         }).start();
     }
 
     private String safeLoadModel(String path) {
+
         if (nativeLoadError != null) {
             return "ERRO CARREGANDO JNI: " + nativeLoadError;
         }
+
         try {
             return nativeLoadModel(path);
         } catch (Throwable e) {
@@ -133,6 +224,7 @@ public class MainActivity extends Activity {
     }
 
     private void addModelButton() {
+
         Button pick = new Button(this);
         pick.setText("Selecionar modelo GGUF");
 
@@ -153,15 +245,21 @@ public class MainActivity extends Activity {
             Intent data) {
 
         super.onActivityResult(requestCode, resultCode, data);
+
         if (requestCode == STORAGE_ACCESS) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()) {
+
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R ||
+                    Environment.isExternalStorageManager()) {
+
                 loadDefaultModel();
+
             } else {
+
                 status.setText("Permissão de arquivos não concedida");
             }
+
             return;
         }
-
 
         if (requestCode == PICK_MODEL &&
                 resultCode == RESULT_OK &&
@@ -170,6 +268,7 @@ public class MainActivity extends Activity {
             Uri uri = data.getData();
 
             if (uri != null) {
+
                 status.setText(
                         "GGUF selecionado • preparando motor local"
                 );
