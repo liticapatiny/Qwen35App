@@ -206,7 +206,15 @@ Java_com_nexus_qwen_MainActivity_nativeChat(
     auto chat_templates = common_chat_templates_init(g_model, "", "", "");
     if (!chat_templates) { return env->NewStringUTF("Falha ao inicializar os templates Jinja do Qwen."); }
     common_chat_templates_inputs chat_inputs;
-    chat_inputs.messages.push_back({"user", texto});
+    size_t separador = texto.find("\n\nPERGUNTA DO USUÁRIO:\n");
+    if (separador != std::string::npos) {
+        std::string system_prompt = texto.substr(0, separador);
+        std::string user_prompt = texto.substr(separador + std::string("\n\nPERGUNTA DO USUÁRIO:\n").size());
+        chat_inputs.messages.push_back({"system", system_prompt});
+        chat_inputs.messages.push_back({"user", user_prompt});
+    } else {
+        chat_inputs.messages.push_back({"user", texto});
+    }
     chat_inputs.enable_thinking = false;
     common_chat_params chat_params = common_chat_templates_apply(chat_templates.get(), chat_inputs);
 
