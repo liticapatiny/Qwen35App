@@ -17,6 +17,13 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 
 import java.io.File;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends Activity {
 
@@ -28,6 +35,28 @@ public class MainActivity extends Activity {
     private LinearLayout configPanel;
     private Button configButton;
     private Button savePromptButton;
+    private Button webToggle;
+    private boolean pesquisaWebAtiva = false;
+
+    private static class FontePesquisa {
+        String titulo;
+        String url;
+
+        FontePesquisa(String titulo, String url) {
+            this.titulo = titulo;
+            this.url = url;
+        }
+    }
+
+    private static class ResultadoPesquisa {
+        String contexto;
+        List<FontePesquisa> fontes;
+
+        ResultadoPesquisa(String contexto, List<FontePesquisa> fontes) {
+            this.contexto = contexto;
+            this.fontes = fontes;
+        }
+    }
 
     private static final int PICK_MODEL = 7001;
     private static final int STORAGE_ACCESS = 7002;
@@ -71,6 +100,7 @@ public class MainActivity extends Activity {
         configPanel = findViewById(R.id.configPanel);
         configButton = findViewById(R.id.config);
         savePromptButton = findViewById(R.id.savePrompt);
+        webToggle = findViewById(R.id.webToggle);
 
         Button send = findViewById(R.id.send);
 
@@ -95,6 +125,15 @@ public class MainActivity extends Activity {
         });
 
         savePromptButton.setOnClickListener(v -> salvarSystemPrompt());
+
+        webToggle.setOnClickListener(v -> {
+            pesquisaWebAtiva = !pesquisaWebAtiva;
+            webToggle.setText(
+                    pesquisaWebAtiva
+                            ? "🔎 Pesquisa: LIGADA"
+                            : "🔎 Pesquisa: DESLIGADA"
+            );
+        });
 
         send.setOnClickListener(v -> sendMessage());
     }
@@ -165,6 +204,229 @@ public class MainActivity extends Activity {
         }
     }
 
+    private ResultadoPesquisa pesquisarWeb(String consulta) {
+
+        List<FontePesquisa> fontes = new ArrayList<>();
+        StringBuilder contexto = new StringBuilder();
+
+        HttpURLConnection conexao = null;
+
+        try {
+            String urlBusca =
+                    "https://html.duckduckgo.com/html/?q=" +
+                    URLEncoder.encode(consulta, "UTF-8");
+
+            URL url = new URL(urlBusca);
+
+            conexao = (HttpURLConnection) url.openConnection();
+            conexao.setRequestMethod("GET");
+            conexao.setConnectTimeout(10000);
+            conexao.setReadTimeout(10000);
+            conexao.setRequestProperty(
+                    "User-Agent",
+                    "Mozilla/5.0 (Android) NEXUS"
+            );
+
+            int codigo = conexao.getResponseCode();
+
+            if (codigo != HttpURLConnection.HTTP_OK) {
+                return new ResultadoPesquisa("", fontes);
+            }
+
+            BufferedReader leitor =
+                    new BufferedReader(
+                            new InputStreamReader(
+                                    conexao.getInputStream(),
+                                    "UTF-8"
+                            )
+                    );
+
+            StringBuilder html = new StringBuilder();
+            String linha;
+
+            while ((linha = leitor.readLine()) != null) {
+                html.append(linha).append('\n');
+            }
+
+            leitor.close();
+
+            String pagina = html.toString();
+
+            String marcadorResultado =
+                    "class=\"result__a\"";
+
+            int posicao = 0;
+
+            while (fontes.size() < 3) {
+
+                int inicioResultado =
+                        pagina.indexOf(
+                                marcadorResultado,
+                                posicao
+                        );
+
+                if (inicioResultado < 0) {
+                    break;
+                }
+
+                int inicioTag =
+                        pagina.lastIndexOf(
+                                "<a",
+                                inicioResultado
+                        );
+
+                int fimTag =
+                        pagina.indexOf(
+                                "</a>",
+                                inicioResultado
+                        );
+
+                if (inicioTag < 0 || fimTag < 0) {
+                    break;
+                }
+
+                String tag =
+                        pagina.substring(
+                                inicioTag,
+                                fimTag + 4
+                        );
+
+                int hrefInicio =
+                        tag.indexOf("href=\"");
+
+                if (hrefInicio < 0) {
+                    posicao = fimTag + 4;
+                    continue;
+                }
+
+                hrefInicio += 6;
+
+                int hrefFim =
+                        tag.indexOf("\"", hrefInicio);
+
+                if (hrefFim < 0) {
+                    posicao = fimTag + 4;
+                    continue;
+                }
+
+                String urlFonte =
+                        tag.substring(
+                                hrefInicio,
+                                hrefFim
+                        );
+
+                int tituloInicio =
+                        tag.indexOf(
+                                ">",
+                                hrefFim
+                        );
+
+                int tituloFim =
+                        tag.lastIndexOf("</a>");
+
+                if (tituloInicio < 0 ||
+                        tituloFim <= tituloInicio) {
+                    posicao = fimTag + 4;
+                    continue;
+                }
+
+                String titulo =
+                        tag.substring(
+                                tituloInicio + 1,
+                                tituloFim
+                        )
+                        .replaceAll("<[^>]*>", "")
+                        .replace("&amp;", "&")
+                        .replace("&quot;", "\"")
+                        .trim();
+
+                int inicioSnippet =
+                        pagina.indexOf(
+                                "result__snippet",
+                                fimTag
+                        );
+
+                String snippet = "";
+
+                if (inicioSnippet >= 0) {
+
+                    int inicioTexto =
+                            pagina.indexOf(
+                                    ">",
+                                    inicioSnippet
+                            );
+
+                    int fimTexto =
+                            pagina.indexOf(
+                                    "</",
+                                    inicioTexto
+                            );
+
+                    if (inicioTexto >= 0 &&
+                            fimTexto > inicioTexto) {
+
+                        snippet =
+                                pagina.substring(
+                                        inicioTexto + 1,
+                                        fimTexto
+                                )
+                                .replaceAll("<[^>]*>", " ")
+                                .replace("&amp;", "&")
+                                .replace("&quot;", "\"")
+                                .replace("&#x27;", "'")
+                                .replace("&lt;", "<")
+                                .replace("&gt;", ">")
+                                .replaceAll("\\s+", " ")
+                                .trim();
+                    }
+                }
+
+                if (snippet.length() > 600) {
+                    snippet = snippet.substring(0, 600);
+                }
+
+                if (!titulo.isEmpty() &&
+                        !urlFonte.isEmpty()) {
+
+                    fontes.add(
+                            new FontePesquisa(
+                                    titulo,
+                                    urlFonte
+                            )
+                    );
+
+                    if (!snippet.isEmpty() &&
+                            contexto.length() < 1800) {
+
+                        contexto
+                                .append(snippet)
+                                .append("\n\n");
+                    }
+                }
+
+                posicao = fimTag + 4;
+            }
+
+            return new ResultadoPesquisa(
+                    contexto.toString().trim(),
+                    fontes
+            );
+
+        } catch (Throwable e) {
+
+            return new ResultadoPesquisa(
+                    "",
+                    fontes
+            );
+
+        } finally {
+
+            if (conexao != null) {
+                conexao.disconnect();
+            }
+        }
+    }
+
     private void sendMessage() {
 
         String text = input.getText().toString().trim();
@@ -183,15 +445,32 @@ public class MainActivity extends Activity {
 
         final String systemPromptFinal = promptConfigurado;
         final String perguntaFinal = text;
+        final boolean pesquisaAtiva = pesquisaWebAtiva;
 
         new Thread(() -> {
 
             String answer;
+            ResultadoPesquisa pesquisa = null;
 
             try {
 
+                if (pesquisaAtiva) {
+                    pesquisa = pesquisarWeb(perguntaFinal);
+                }
+
                 String promptParaQwen =
-                        systemPromptFinal +
+                        systemPromptFinal;
+
+                if (pesquisaAtiva &&
+                        pesquisa != null &&
+                        !pesquisa.contexto.isEmpty()) {
+
+                    promptParaQwen +=
+                            "\n\nCONTEXTO DA PESQUISA:\n" +
+                            pesquisa.contexto;
+                }
+
+                promptParaQwen +=
                         "\n\nPERGUNTA DO USUÁRIO:\n" +
                         perguntaFinal;
 
@@ -202,10 +481,48 @@ public class MainActivity extends Activity {
             }
 
             final String finalAnswer = answer;
+            final ResultadoPesquisa pesquisaFinal = pesquisa;
 
-            runOnUiThread(() ->
-                    addMessage("Qwen3.5", finalAnswer)
-            );
+            runOnUiThread(() -> {
+
+                addMessage("Qwen3.5", finalAnswer);
+
+                if (pesquisaAtiva) {
+
+                    if (pesquisaFinal != null &&
+                            !pesquisaFinal.fontes.isEmpty()) {
+
+                        StringBuilder fontesTexto =
+                                new StringBuilder();
+
+                        fontesTexto.append(
+                                "Fontes da pesquisa:\n\n"
+                        );
+
+                        for (FontePesquisa fonte :
+                                pesquisaFinal.fontes) {
+
+                            fontesTexto
+                                    .append(fonte.titulo)
+                                    .append("\n")
+                                    .append(fonte.url)
+                                    .append("\n\n");
+                        }
+
+                        addMessage(
+                                "Fontes",
+                                fontesTexto.toString().trim()
+                        );
+
+                    } else {
+
+                        addMessage(
+                                "Pesquisa",
+                                "Não foi possível obter resultados da web."
+                        );
+                    }
+                }
+            });
 
         }).start();
     }
